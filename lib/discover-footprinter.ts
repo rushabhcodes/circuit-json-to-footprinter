@@ -3987,7 +3987,10 @@ const generateSeeds = (target: Footprint, analysis: TargetAnalysis) => {
       }`
       const addThermalPadSeed = (seed: string) => {
         seeds.add(seed)
-        if (family !== "qfn" || !analysis.thermalViaGrid) return
+        // Only these footprinter families currently emit thermal-via grids.
+        // Two-sided exposed-pad packages need DFN candidates to retain drills.
+        if ((family !== "qfn" && family !== "dfn") || !analysis.thermalViaGrid)
+          return
 
         const { columns, holeDiameter, outerDiameter, pitch, rows } =
           analysis.thermalViaGrid
@@ -4112,7 +4115,17 @@ const selectSeedsToOptimize = (
 
   if (analysis.thermalPad) {
     const selectedThermalPadFamilies = new Set<string>()
-    for (const candidate of candidates) {
+    // Pad geometry alone cannot distinguish a solid exposed pad from one
+    // with vias. Optimize the via-bearing seed before its pad-only sibling;
+    // otherwise the one-seed-per-family limit can discard the matching drills.
+    const thermalPadCandidates = analysis.thermalViaGrid
+      ? candidates.toSorted(
+          (left, right) =>
+            Number(right.footprint.vias.length > 0) -
+            Number(left.footprint.vias.length > 0),
+        )
+      : candidates
+    for (const candidate of thermalPadCandidates) {
       const isQuarterTurn =
         candidate.searchRotation === 90 || candidate.searchRotation === 270
       const sourceWidth = isQuarterTurn
